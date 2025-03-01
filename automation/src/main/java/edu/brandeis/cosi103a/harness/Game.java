@@ -1,113 +1,274 @@
 package edu.brandeis.cosi103a.harness;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Random;
+
+import edu.brandeis.cosi103a.harness.Automation_Card.AutomationCard;
+import edu.brandeis.cosi103a.harness.Cryptocurrency_Card.CryptocurrencyCard;
+import edu.brandeis.cosi103a.harness.Piles.MainPile;
+import edu.brandeis.cosi103a.harness.Piles.Pile;
+
 
 public class Game {
-    private List<Card> supply;
-    private Player player1;
-    private Player player2;
 
-    public Game() {
-        supply = new ArrayList<>();
-        player1 = new Player();
-        player2 = new Player();
-        setupGame();
+    public Player player1;
+    public Player player2;
+    public Pile MainPile;
+    public Pile DiscardedPile;
+    public int turnCount;
+
+    public Game(String name1, String name2) {
+        this.player1 = new Player(name1);
+        this.player2 = new Player(name2);
+        this.MainPile = new MainPile();
     }
 
-    private void setupGame() {
-        // Add cards to supply
-        addCardsToSupply(new AutomationCard("Method", 2, 1), 14);
-        addCardsToSupply(new AutomationCard("Module", 5, 3), 8);
-        addCardsToSupply(new AutomationCard("Framework", 8, 6), 8);
-        addCardsToSupply(new CryptocurrencyCard("Bitcoin", 0, 1), 60);
-        addCardsToSupply(new CryptocurrencyCard("Ethereum", 3, 2), 40);
-        addCardsToSupply(new CryptocurrencyCard("Dogecoin", 6, 3), 30);
+    //Each player begins with a starter deck, consisting of 7 Bitcoins and 3 Methods
+    //Remember, CANNOT alter the arrayList in a for-each loop! Or use an iterator instead.
+    public void initializeDrawPile (Player player) {
+        int BitCoinCount = 0;
+        int MethodCount = 0;
+        ArrayList<Card> cardsToRemove = new ArrayList<>();
+        this.MainPile.shuffle();
 
-        // Distribute starter decks
-        distributeStarterDeck(player1);
-        distributeStarterDeck(player2);
+        for (Card card: this.MainPile.getPile()) {
+            if (BitCoinCount < 7 && card.getName().contains("Bitcoin")) {
+                player.getDrawPile().addCard(card);
+                cardsToRemove.add(card);
+                BitCoinCount++;
+            } else if (MethodCount < 3 && card.getName().contains("Method")) {
+                player.getDrawPile().addCard(card);
+                cardsToRemove.add(card);
+                MethodCount++;
+            }
 
-        // Shuffle decks
-        player1.drawHand();
-        player2.drawHand();
-    }
+            if (BitCoinCount == 7 && MethodCount == 3) {
+                break;
+            }
+        }    
 
-    private void addCardsToSupply(Card card, int count) {
-        for (int i = 0; i < count; i++) {
-            supply.add(card);
+        player.getDrawPile().shuffle();
+
+        for (Card cardToRemove: cardsToRemove) {
+            this.MainPile.removeCard(cardToRemove);
         }
     }
 
-    private void distributeStarterDeck(Player player) {
-        for (int i = 0; i < 7; i++) {
-            player.addCardToDeck(new CryptocurrencyCard("Bitcoin", 0, 1));
+    //This is an automated machine player, so it will just buy the card with the maximum value of AP with its current cryptocoins
+    public void buyPhase(Player player) {
+        player.setCryptocoins();
+
+        System.out.println(player.getName() + " has " + player.getCryptocoins() + " cryptocoins.");
+        
+        int maxAP = -1;
+        Card bestAutomationCard = null;
+
+        for (Card card: this.MainPile.getPile()) {
+            if (card instanceof AutomationCard) {
+                if (player.getCryptocoins() >= card.getCost() && card.getValue() > maxAP) {
+                    maxAP = card.getValue();
+                    bestAutomationCard = card;
+                }     
+            }
         }
-        for (int i = 0; i < 3; i++) {
-            player.addCardToDeck(new AutomationCard("Method", 2, 1));
+        if (bestAutomationCard != null) {
+            player.buyCard(bestAutomationCard);
+            this.MainPile.removeCard(bestAutomationCard);
+
+            if (bestAutomationCard.getName().contains("Framework")) {
+                ((MainPile) this.MainPile).frameworkCount--;
+            }
+
+            System.out.println(player.getName() + " bought " + bestAutomationCard.getName() + ".");
+            System.out.println(player.getName() + " has " + player.getCryptocoins() + " cryptocoins left.");
+            System.out.println("\n");
+
+            return;
+        } 
+
+        //If there are no Automation cards left in the main pile, buy the card with the maximum value of cryptocoins
+        int maxCryptoCurrency = -1;
+        Card bestCryptocurrencyCard = null;
+
+        for (Card card: this.MainPile.getPile()) {
+            if (card instanceof CryptocurrencyCard) {
+                if (player.getCryptocoins() >= card.getCost() && card.getValue() > maxCryptoCurrency) {
+                    maxCryptoCurrency = card.getValue();
+                    bestCryptocurrencyCard = card;
+                }     
+            }
+        }
+        if (bestCryptocurrencyCard != null) {
+            player.buyCard(bestCryptocurrencyCard);
+            this.MainPile.removeCard(bestCryptocurrencyCard);
+
+            System.out.println(player.getName() + " bought " + bestCryptocurrencyCard.getName());
+            System.out.println(player.getName() + " has " + player.getCryptocoins() + " cryptocoins left.");
+            System.out.println("\n");
+        }
+    }
+
+    public void cleanUpPhase(Player player) {
+        //Discard all cards in the player's hand
+        player.getDiscardPile().addAll(player.getHand());
+        player.getHand().getPile().clear();
+
+        //Add new hand through the draw pile
+        for (int i = 0; i < 5; i++) {
+            if (player.getDrawPile().isEmpty()) { //If the draw pile is empty, shuffle the discard pile and add it to the draw pile
+                player.getDrawPile().addAll(player.getDiscardPile());
+                player.getDiscardPile().getPile().clear();
+                player.getDrawPile().shuffle();
+            }
+            if (!player.getDrawPile().getPile().isEmpty()) {
+                Card drawnCard = player.getDrawPile().get(0);
+                player.getHand().addCard(drawnCard);
+                player.getDrawPile().removeCard(drawnCard);
+            } else {
+                break;
+            }
+        }   
+        System.out.println("This is " + player.getName() + "'s new hand: \n" + player.getHand());
+    }
+    
+    public void buy(Player player1, Player player2) {
+        System.out.println("Buying...");
+
+        buyPhase(player1);
+        buyPhase(player2);
+    }
+
+    public void cleanUp(Player player1, Player player2) {
+        System.out.println("Cleaning up...");
+        
+        cleanUpPhase(player1);
+        cleanUpPhase(player2);
+    }
+
+    public void logAPs(Player player1, Player player2) {
+        System.out.println(player1.getName() + " now has " + player1.getAPs() + " Automation points!");
+        System.out.println(player2.getName() + " now has " + player2.getAPs() + " Automation points!");
+        if (player1.getAPs() > player2.getAPs()) {
+            System.out.println("Looks like " + player2.getName() + " needs to catch up!\n" 
+            + player1.getName() + ", keep up the good work!");
+        } else if (player2.getAPs() > player1.getAPs()) {
+            System.out.println("Looks like " + player1.getName() + " needs to catch up!\n" 
+            + player2.getName() + ", keep up the good work!");
+        } else {
+            System.out.println("Oh my god, it's a tie -- things are getting heated up here!\n");
+        }
+    }
+
+    public void takeTurn(Player player1, Player player2) {
+        buy(player1, player2);
+        cleanUp(player1, player2);
+    }
+
+    public void decideWinner(Player player1, Player player2) {
+        System.out.println(player1.getName() + " has " + player1.getAPs() + " points.");
+        System.out.println(player2.getName() + " has " + player2.getAPs() + " points.");
+        
+        if (player1.getAPs() > player2.getAPs()) {
+            System.out.println(player1.getName() + " wins!");
+        }
+
+        if (player2.getAPs() > player1.getAPs()) {
+            System.out.println(player2.getName() + " wins!");
+        }
+
+        if (player2.getAPs() == player1.getAPs()) {
+            System.out.println("It's a tie! We love world peace don't we?");
+        }
+    }
+
+    public void logFrameworkCounts() {
+        System.out.println("There are " + ((MainPile)this.MainPile).frameworkCount + " Method cards left.\nWho will be the winner?\n");
+    }
+
+    public void gameStarterBanners(int i) {
+        if (i == 1) {
+            System.out.println("We are flipping the coin...");
+            System.out.println("It's heads!");
+            System.out.println(this.player1.getName() + " will play first!");
+            System.out.println("Sorry, " + this.player2.getName() + "!\n" 
+            + "I am sure luck will be with you later in the game!");
+        } else {
+            System.out.println("We are flipping the coin...");
+            System.out.println("It's tails!");
+            System.out.println(this.player2.getName() + " will play first!");
+            System.out.println("Sorry, " + this.player1.getName() + "!\n" 
+            + "I am sure luck will be with you later in the game!");
         }
     }
 
     public void playGame() {
-        while (!isGameOver()) {
-            takeTurn(player1);
-            takeTurn(player2);
-        }
-        determineWinner();
-    }
+        Random rand = new Random();
+        int seed = rand.nextInt((2 - 1) + 1) + 1;
 
-    private void takeTurn(Player player) {
-        int availableCoins = 0;
+        //---Game starts here---
+        gameStarterBanners(seed);
 
-        // Play all coins in hand
-        for (Card card : player.getHand()) {
-            if (card instanceof CryptocurrencyCard) {
-                availableCoins += ((CryptocurrencyCard) card).getValue();
+        if (seed == 1) {
+            initializeDrawPile(player1);
+            initializeDrawPile(player2);
+            turnCount = 1;
+
+            while (((MainPile)this.MainPile).frameworkCount > 0) {
+                System.out.println("Turn " + turnCount + " has started!");
+                
+                logFrameworkCounts();
+                takeTurn(this.player1, this.player2);
+                logAPs(player1, player2);
+
+                System.out.println("Turn " + turnCount + " has ended!");
+
+                System.out.println("------------------------------------------");
+
+                turnCount++;
             }
-        }
 
-        // Attempt to buy a card
-        for (Card card : supply) {
-            if (card.getCost() <= availableCoins) {
-                player.getDiscardPile().add(card);
-                supply.remove(card);
-                break;
-            }
-        }
+            System.out.println("Game Over!");
+            decideWinner(player1, player2);
 
-        // Cleanup phase
-        player.discardHand();
-        player.drawHand();
-    }
-
-    private boolean isGameOver() {
-        return supply.stream().noneMatch(card -> card.getName().equals("Framework"));
-    }
-
-    private void determineWinner() {
-        int player1AP = calculateAutomationPoints(player1);
-        int player2AP = calculateAutomationPoints(player2);
-
-        System.out.println("Player 1 AP: " + player1AP);
-        System.out.println("Player 2 AP: " + player2AP);
-
-        if (player1AP > player2AP) {
-            System.out.println("Player 1 wins!");
-        } else if (player2AP > player1AP) {
-            System.out.println("Player 2 wins!");
         } else {
-            System.out.println("It's a tie!");
+            initializeDrawPile(player2);
+            initializeDrawPile(player1);
+            turnCount = 1;
+
+            while (((MainPile)this.MainPile).frameworkCount > 0) {
+                System.out.println("Turn " + turnCount + " has started!");
+                
+                logFrameworkCounts();
+                takeTurn(this.player2, this.player1);
+                logAPs(player2, player1);
+
+                System.out.println("Turn " + turnCount + " has ended!");
+                System.out.println("------------------------------------------");
+
+                turnCount++;
+            }
+
+            System.out.println("Game Over!");
+            decideWinner(player2, player1);
+
         }
     }
 
-    private int calculateAutomationPoints(Player player) {
-        return player.getDeck().stream()
-                .filter(card -> card instanceof AutomationCard)
-                .mapToInt(card -> ((AutomationCard) card).getValue())
-                .sum();
-    }
+    // public static void main(String[] args) {
+    //     Player player1 = new Player("Alice");
+    //     Player player2 = new Player("Bob");
+    //     Game game = new Game("Alice", "Bob");
 
-    public List<Card> getSupply() {
-        return supply;
-    }
+    //     game.initializeDrawPile(player1);
+    //     // System.out.println(player1.drawPile);
+    //     // System.out.println(player1.discardPile);
+    //     game.MainPile.shuffle();
+
+    //     System.out.println(game.MainPile.get(2).getName());
+    //     game.cleanUpPhase(player1);
+
+    //     game.playGame();
+    //     System.out.println(game.MainPile.size());
+    // }
+
 }

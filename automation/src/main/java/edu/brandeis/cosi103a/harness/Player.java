@@ -1,53 +1,84 @@
 package edu.brandeis.cosi103a.harness;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import edu.brandeis.cosi103a.harness.Automation_Card.AutomationCard;
+import edu.brandeis.cosi103a.harness.Cryptocurrency_Card.CryptocurrencyCard;
+import edu.brandeis.cosi103a.harness.Piles.Pile;
 
 public class Player {
-    private List<Card> deck;
-    private List<Card> hand;
-    private List<Card> discardPile;
+    
+    private Pile drawPile = new Pile();
+    private Pile discardPile = new Pile();
+    private Pile hand = new Pile();
 
-    public Player() {
-        deck = new ArrayList<>();
-        hand = new ArrayList<>();
-        discardPile = new ArrayList<>();
+    private String name;
+    private int cryptocoins = 0;
+    private int APs = 0;
+
+    public Player(String name) {
+        this.name = name;
+        this.drawPile = new Pile();
+        this.discardPile = new Pile();
+        this.cryptocoins = 0;
+        this.APs = 0;
     }
 
-    public void addCardToDeck(Card card) {
-        deck.add(card);
+    public void playCard(Card card) {
+        this.drawPile.removeCard(card);
     }
 
-    public void drawHand() {
-        if (deck.size() < 5) {
-            reshuffle();
+    /**
+     * Add a card directly into player's discard pile
+     * @param card the card bought
+     */
+    public void buyCard(Card card) {
+        if (this.cryptocoins >= card.getCost()) {
+            this.cryptocoins -= card.getCost();
+            this.discardPile.addCard(card);
+        } else {
+            throw new IllegalArgumentException("Not enough cryptocoins to buy this card");
         }
-        for (int i = 0; i < 5 && !deck.isEmpty(); i++) {
-            hand.add(deck.remove(0));
+        if (card instanceof AutomationCard) {
+            this.APs += card.getValue();
         }
     }
 
-    public void discardHand() {
-        discardPile.addAll(hand);
-        hand.clear();
+    //A player can only buy with the current cryptocoins they have in the current round of hands
+    public void setCryptocoins() {
+        for (int i = 0; i < this.hand.size(); i++) {
+            Card card = this.hand.get(i);
+            if (card instanceof CryptocurrencyCard) {
+                this.cryptocoins += card.getValue();
+            }
+        }
     }
 
-    private void reshuffle() {
-        Collections.shuffle(discardPile);
-        deck.addAll(discardPile);
-        discardPile.clear();
+    public int getCryptocoins() {
+        return this.cryptocoins;
     }
 
-    public List<Card> getHand() {
-        return hand;
+    public String getName() {
+        return this.name;
     }
 
-    public List<Card> getDeck() {
-        return deck;
+    public int getAPs() {
+        return this.APs;
     }
 
-    public List<Card> getDiscardPile() {
-        return discardPile;
+    public Pile getDrawPile() {
+        return this.drawPile;
     }
+
+    public Pile getDiscardPile() {
+        return this.discardPile;
+    }
+
+    public Pile getHand() {
+        return this.hand;
+    }
+
+    @Override
+    public String toString() {
+        return this.name;
+    }
+
 }
